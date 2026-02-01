@@ -1,3 +1,5 @@
+import "./config.js";
+
 const micBtn = document.getElementById("micBtn");
 const chat = document.getElementById("chat");
 
@@ -14,15 +16,6 @@ let memory = JSON.parse(localStorage.getItem("agentMemory")) || {
 function saveMemory() {
   localStorage.setItem("agentMemory", JSON.stringify(memory));
 }
-
-/* =======================
-   VOICES
-======================= */
-
-let voices = [];
-window.speechSynthesis.onvoiceschanged = () => {
-  voices = window.speechSynthesis.getVoices();
-};
 
 /* =======================
    CHAT UI
@@ -45,6 +38,15 @@ function addSystemMessage(text) {
 }
 
 /* =======================
+   VOICES
+======================= */
+
+let voices = [];
+speechSynthesis.onvoiceschanged = () => {
+  voices = speechSynthesis.getVoices();
+};
+
+/* =======================
    SPEECH RECOGNITION
 ======================= */
 
@@ -58,107 +60,110 @@ if (SpeechRecognition) {
   recognition = new SpeechRecognition();
   recognition.lang = "en-IN";
   recognition.continuous = false;
-  recognition.interimResults = false;
 
   micBtn.onclick = () => {
     if (listening) return;
-
     listening = true;
-    micBtn.classList.add("listening");
-    micBtn.classList.add("disabled");
+    micBtn.classList.add("listening", "disabled");
     addSystemMessage("Listening...");
     recognition.start();
   };
 
-  recognition.onresult = (event) => {
-    const text = event.results[0][0].transcript.toLowerCase();
+  recognition.onresult = async (event) => {
+    const text = event.results[0][0].transcript;
     addMessage(text, "user");
     addSystemMessage("Thinking...");
-    handleCommand(text);
+    await aiProcess(text);
   };
 
   recognition.onend = () => {
     listening = false;
-    micBtn.classList.remove("listening");
-    micBtn.classList.remove("disabled");
+    micBtn.classList.remove("listening", "disabled");
   };
 }
 
 /* =======================
-   THINKING
+   AI PROCESSING
 ======================= */
 
-function think(text) {
-  if (text.includes("tired")) {
-    return "You sound tired. Should I keep tomorrow lighter?";
+async function aiProcess(text) {
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${AI_CONFIG.API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "llama3-8b-8192",
+        messages: [
+          {
+            role: "system",
+            content: `
+You are an intent extractor.
+Return ONLY valid JSON.
+Possible intents: REMINDER, NOTE, SCHEDULE, UNKNOWN.
+Time format: HH:MM (24h) or null.
+`
+          },
+          {
+            role: "user",
+            content: text
+          }
+        ]
+      })
+    });
+
+    const data = await response.json();
+    const aiText = data.choices[0].message.content;
+    const parsed = JSON.parse(aiText);
+
+    executeIntent(parsed);
+
+  } catch (e) {
+    respond("I had trouble understanding that.");
   }
-  return null;
 }
 
 /* =======================
-   COMMAND HANDLER
+   EXECUTE INTENT (SAFE)
 ======================= */
 
-function handleCommand(text) {
-
-  const thought = think(text);
-  if (thought) {
-    respond(thought);
-    return;
-  }
-
-  if (text.startsWith("note")) {
-    const note = text.replace("note", "").trim();
-    memory.notes.push({ text: note, time: new Date().toISOString() });
+function executeIntent(ai) {
+  if (ai.intent === "NOTE") {
+    memory.notes.push({ text: ai.text, time: new Date().toISOString() });
     saveMemory();
-    respond("Note saved.");
+    respond("Saved as a note.");
     return;
   }
 
-  if (text.startsWith("remind me")) {
-    const match = text.match(/at (\d{1,2})(?::(\d{1,2}))?\s?(am|pm)?/);
-    if (!match) {
-      respond("Please say a time.");
-      return;
-    }
-
-    let hour = parseInt(match[1]);
-    let minute = match[2] ? parseInt(match[2]) : 0;
-    const period = match[3];
-
-    if (period === "pm" && hour < 12) hour += 12;
-    if (period === "am" && hour === 12) hour = 0;
-
-    const reminderText = text
-      .replace(match[0], "")
-      .replace("remind me", "")
-      .trim();
-
-    const reminderTime = new Date();
-    reminderTime.setHours(hour, minute, 0, 0);
+  if (ai.intent === "REMINDER" && ai.time) {
+    const [hour, minute] = ai.time.split(":").map(Number);
+    const time = new Date();
+    time.setHours(hour, minute, 0, 0);
 
     memory.reminders.push({
-      text: reminderText,
-      time: reminderTime.toISOString(),
+      text: ai.text,
+      time: time.toISOString(),
       triggered: false
     });
 
     saveMemory();
-    respond(`I will remind you at ${hour}:${minute.toString().padStart(2, "0")}`);
+    respond(`Reminder set for ${ai.time}`);
     return;
   }
 
-  respond("I didn’t understand that.");
+  respond("I understood you, but didn’t find an action.");
 }
 
 /* =======================
-   REMINDERS
+   REMINDER LOOP
 ======================= */
 
 setInterval(() => {
   const now = new Date();
 
-  memory.reminders.forEach((r) => {
+  memory.reminders.forEach(r => {
     if (!r.triggered && new Date(r.time) <= now) {
       respond("Reminder: " + r.text);
       if (Notification.permission === "granted") {
