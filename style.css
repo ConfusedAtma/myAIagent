@@ -1,0 +1,57 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, Arial, sans-serif;
+  background: #0f0f0f;
+  color: #fff;
+}
+
+#app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#chat {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.message {
+  max-width: 80%;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  border-radius: 14px;
+  line-height: 1.4;
+  font-size: 15px;
+}
+
+.user {
+  background: #2563eb;
+  align-self: flex-end;
+}
+
+.agent {
+  background: #1f2937;
+  align-self: flex-start;
+}
+
+#bottomBar {
+  padding: 12px;
+  border-top: 1px solid #222;
+  display: flex;
+  justify-content: center;
+}
+
+#micBtn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+}
