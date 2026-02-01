@@ -40,6 +40,13 @@ body {
   align-self: flex-start;
 }
 
+.system {
+  opacity: 0.6;
+  font-size: 13px;
+  text-align: center;
+  margin: 10px 0;
+}
+
 #bottomBar {
   padding: 12px;
   border-top: 1px solid #222;
@@ -54,4 +61,13 @@ body {
   border: none;
   font-size: 24px;
   cursor: pointer;
+}
+
+#micBtn.listening {
+  background: #dc2626;
+}
+
+#micBtn.disabled {
+  opacity: 0.5;
+  pointer-events: none;
 }

@@ -16,49 +16,13 @@ function saveMemory() {
 }
 
 /* =======================
-   NOTIFICATIONS
-======================= */
-
-if ("Notification" in window && Notification.permission === "default") {
-  Notification.requestPermission();
-}
-
-/* =======================
    VOICES
 ======================= */
 
 let voices = [];
-
 window.speechSynthesis.onvoiceschanged = () => {
   voices = window.speechSynthesis.getVoices();
 };
-
-/* =======================
-   SPEECH RECOGNITION
-======================= */
-
-const SpeechRecognition =
-  window.SpeechRecognition || window.webkitSpeechRecognition;
-
-let recognition;
-
-if (SpeechRecognition) {
-  recognition = new SpeechRecognition();
-  recognition.lang = "en-IN";
-  recognition.continuous = false;
-  recognition.interimResults = false;
-
-  micBtn.onclick = () => {
-    addMessage("Listening...", "agent");
-    recognition.start();
-  };
-
-  recognition.onresult = (event) => {
-    const text = event.results[0][0].transcript.toLowerCase();
-    addMessage(text, "user");
-    handleCommand(text);
-  };
-}
 
 /* =======================
    CHAT UI
@@ -70,6 +34,54 @@ function addMessage(text, type) {
   div.innerText = text;
   chat.appendChild(div);
   chat.scrollTop = chat.scrollHeight;
+}
+
+function addSystemMessage(text) {
+  const div = document.createElement("div");
+  div.className = "system";
+  div.innerText = text;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+/* =======================
+   SPEECH RECOGNITION
+======================= */
+
+const SpeechRecognition =
+  window.SpeechRecognition || window.webkitSpeechRecognition;
+
+let recognition;
+let listening = false;
+
+if (SpeechRecognition) {
+  recognition = new SpeechRecognition();
+  recognition.lang = "en-IN";
+  recognition.continuous = false;
+  recognition.interimResults = false;
+
+  micBtn.onclick = () => {
+    if (listening) return;
+
+    listening = true;
+    micBtn.classList.add("listening");
+    micBtn.classList.add("disabled");
+    addSystemMessage("Listening...");
+    recognition.start();
+  };
+
+  recognition.onresult = (event) => {
+    const text = event.results[0][0].transcript.toLowerCase();
+    addMessage(text, "user");
+    addSystemMessage("Thinking...");
+    handleCommand(text);
+  };
+
+  recognition.onend = () => {
+    listening = false;
+    micBtn.classList.remove("listening");
+    micBtn.classList.remove("disabled");
+  };
 }
 
 /* =======================
@@ -105,7 +117,6 @@ function handleCommand(text) {
 
   if (text.startsWith("remind me")) {
     const match = text.match(/at (\d{1,2})(?::(\d{1,2}))?\s?(am|pm)?/);
-
     if (!match) {
       respond("Please say a time.");
       return;
@@ -141,7 +152,7 @@ function handleCommand(text) {
 }
 
 /* =======================
-   REMINDERS LOOP
+   REMINDERS
 ======================= */
 
 setInterval(() => {
