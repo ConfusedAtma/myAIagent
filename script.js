@@ -1,15 +1,43 @@
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("JS loaded, DOM ready");
+  console.log("App booted");
 
   const micBtn = document.getElementById("micBtn");
   const chat = document.getElementById("chat");
 
-  if (!micBtn) {
-    console.error("Mic button not found");
+  if (!micBtn || !chat) {
+    console.error("Critical DOM elements missing");
     return;
   }
 
-  const WORKER_URL = "https://tight-credit-f313my-ai-agent-worker.sarkarkoushik427.workers.dev";
+  // 🔐 Cloudflare Worker endpoint (PUBLIC, SAFE)
+  const WORKER_URL =
+    "https://tight-credit-f313my-ai-agent-worker.sarkarkoushik427.workers.dev";
+
+  /* =======================
+     SAFETY (GROK-STYLE)
+  ======================= */
+
+  const SAFETY = {
+    MIN_GAP_MS: 3000, // 3 sec cooldown
+    DAILY_LIMIT: 200  // soft limit
+  };
+
+  let lastAiCallTime = 0;
+
+  function todayKey() {
+    const d = new Date();
+    return `ai-usage-${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  }
+
+  function getDailyUsage() {
+    return Number(localStorage.getItem(todayKey()) || 0);
+  }
+
+  function incrementDailyUsage() {
+    const count = getDailyUsage() + 1;
+    localStorage.setItem(todayKey(), count);
+    return count;
+  }
 
   /* =======================
      MEMORY
@@ -17,8 +45,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let memory = JSON.parse(localStorage.getItem("agentMemory")) || {
     notes: [],
-    reminders: [],
-    schedules: []
+    reminders: []
   };
 
   function saveMemory() {
@@ -37,7 +64,7 @@ document.addEventListener("DOMContentLoaded", () => {
     chat.scrollTop = chat.scrollHeight;
   }
 
-  function addSystemMessage(text) {
+  function addSystem(text) {
     const div = document.createElement("div");
     div.className = "system";
     div.innerText = text;
@@ -46,14 +73,14 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   /* =======================
-     SPEECH RECOGNITION
+     SPEECH
   ======================= */
 
   const SpeechRecognition =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 
   if (!SpeechRecognition) {
-    addSystemMessage("Speech recognition not supported on this device.");
+    addSystem("Speech recognition not supported on this device.");
     return;
   }
 
@@ -63,28 +90,43 @@ document.addEventListener("DOMContentLoaded", () => {
   recognition.interimResults = false;
 
   micBtn.addEventListener("click", () => {
-    console.log("Mic clicked");
-    addSystemMessage("Listening...");
+    addSystem("Listening…");
     recognition.start();
   });
 
   recognition.onresult = async (event) => {
     const text = event.results[0][0].transcript;
     addMessage(text, "user");
-    addSystemMessage("Thinking...");
+    addSystem("Thinking…");
     await aiProcess(text);
   };
 
-  recognition.onerror = (e) => {
-    console.error("Speech error", e);
-    addSystemMessage("Mic error. Try again.");
+  recognition.onerror = () => {
+    addSystem("Mic error. Try again.");
   };
 
   /* =======================
-     AI PROCESS
+     AI PROCESS (SAFE)
   ======================= */
 
   async function aiProcess(text) {
+    const now = Date.now();
+
+    // Cooldown
+    if (now - lastAiCallTime < SAFETY.MIN_GAP_MS) {
+      addSystem("Hold on…");
+      return;
+    }
+
+    // Daily soft limit
+    if (getDailyUsage() >= SAFETY.DAILY_LIMIT) {
+      respond("Let’s pause for today. We can continue tomorrow 🙂");
+      return;
+    }
+
+    lastAiCallTime = now;
+    incrementDailyUsage();
+
     try {
       const res = await fetch(WORKER_URL, {
         method: "POST",
@@ -92,17 +134,30 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({ text })
       });
 
+      if (!res.ok) {
+        respond("Too many requests. Slow down a bit.");
+        return;
+      }
+
       const ai = await res.json();
       executeIntent(ai);
-    } catch (err) {
-      console.error(err);
-      addSystemMessage("AI not reachable.");
+
+    } catch (e) {
+      console.error(e);
+      respond("AI not reachable right now.");
     }
   }
 
+  /* =======================
+     INTENT EXECUTION
+  ======================= */
+
   function executeIntent(ai) {
     if (ai.intent === "NOTE") {
-      memory.notes.push({ text: ai.text, time: new Date().toISOString() });
+      memory.notes.push({
+        text: ai.text,
+        time: new Date().toISOString()
+      });
       saveMemory();
       respond("Saved as note.");
       return;
@@ -126,6 +181,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
     respond("I understood you, but no action matched.");
   }
+
+  /* =======================
+     REMINDER LOOP
+  ======================= */
+
+  setInterval(() => {
+    const now = new Date();
+
+    memory.reminders.forEach(r => {
+      if (!r.triggered && new Date(r.time) <= now) {
+        respond("Reminder: " + r.text);
+        r.triggered = true;
+        saveMemory();
+      }
+    });
+  }, 20000);
+
+  /* =======================
+     AGENT RESPONSE
+  ======================= */
 
   function respond(message) {
     addMessage(message, "agent");
