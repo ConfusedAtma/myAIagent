@@ -1,33 +1,31 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My AI Agent</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My AI Agent</title>
 
-    <link rel="manifest" href="manifest.json" />
-    <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
-    <div id="app">
-        <div id="chat"></div>
+  <div id="app">
+    <div id="chat"></div>
 
-        <div id="bottomBar">
-            <button id="micBtn" class="idle">🎤</button>
-        </div>
+    <div id="bottomBar">
+      <button id="micBtn" class="idle">🎤</button>
     </div>
+  </div>
 
-    <script type="module" src="script.js"></script>
+  <!-- Main app logic -->
+  <script src="script.js"></script>
 
-    <script>
-        if ("serviceWorker" in navigator) {
-            navigator.serviceWorker.register("./sw.js");
-        }
-    </script>
-
-
+  <!-- PWA service worker -->
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("./sw.js");
+    }
+  </script>
 </body>
-
 </html>

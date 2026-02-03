@@ -1,7 +1,6 @@
-import "./config.js";
-
 const micBtn = document.getElementById("micBtn");
 const chat = document.getElementById("chat");
+const WORKER_URL = "tight-credit-f313my-ai-agent-worker.sarkarkoushik427.workers.dev";
 
 /* =======================
    MEMORY
@@ -83,68 +82,45 @@ if (SpeechRecognition) {
 }
 
 /* =======================
-   AI PROCESSING
+   AI PROCESS (SECURE)
 ======================= */
 
 async function aiProcess(text) {
   try {
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    const res = await fetch(WORKER_URL, {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${AI_CONFIG.API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "llama3-8b-8192",
-        messages: [
-          {
-            role: "system",
-            content: `
-You are an intent extractor.
-Return ONLY valid JSON.
-Possible intents: REMINDER, NOTE, SCHEDULE, UNKNOWN.
-Time format: HH:MM (24h) or null.
-`
-          },
-          {
-            role: "user",
-            content: text
-          }
-        ]
-      })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text })
     });
 
-    const data = await response.json();
-    const aiText = data.choices[0].message.content;
-    const parsed = JSON.parse(aiText);
+    const aiJson = await res.json();
+    executeIntent(aiJson);
 
-    executeIntent(parsed);
-
-  } catch (e) {
-    respond("I had trouble understanding that.");
+  } catch {
+    respond("AI service is not reachable right now.");
   }
 }
 
 /* =======================
-   EXECUTE INTENT (SAFE)
+   EXECUTE INTENT
 ======================= */
 
 function executeIntent(ai) {
   if (ai.intent === "NOTE") {
     memory.notes.push({ text: ai.text, time: new Date().toISOString() });
     saveMemory();
-    respond("Saved as a note.");
+    respond("Saved as note.");
     return;
   }
 
   if (ai.intent === "REMINDER" && ai.time) {
-    const [hour, minute] = ai.time.split(":").map(Number);
-    const time = new Date();
-    time.setHours(hour, minute, 0, 0);
+    const [h, m] = ai.time.split(":").map(Number);
+    const t = new Date();
+    t.setHours(h, m, 0, 0);
 
     memory.reminders.push({
       text: ai.text,
-      time: time.toISOString(),
+      time: t.toISOString(),
       triggered: false
     });
 
@@ -153,7 +129,7 @@ function executeIntent(ai) {
     return;
   }
 
-  respond("I understood you, but didn’t find an action.");
+  respond("I understood you, but no action matched.");
 }
 
 /* =======================
@@ -162,7 +138,6 @@ function executeIntent(ai) {
 
 setInterval(() => {
   const now = new Date();
-
   memory.reminders.forEach(r => {
     if (!r.triggered && new Date(r.time) <= now) {
       respond("Reminder: " + r.text);
@@ -182,13 +157,13 @@ setInterval(() => {
 function respond(message) {
   addMessage(message, "agent");
 
-  const utterance = new SpeechSynthesisUtterance(message);
-  const heera = voices.find(v => v.name === "Microsoft Heera - English (India)");
-  if (heera) utterance.voice = heera;
+  const utter = new SpeechSynthesisUtterance(message);
+  const heera = voices.find(v => v.name.includes("Heera"));
+  if (heera) utter.voice = heera;
 
-  utterance.lang = "en-IN";
-  utterance.rate = 0.95;
-  utterance.pitch = 1.1;
+  utter.lang = "en-IN";
+  utter.rate = 0.95;
+  utter.pitch = 1.1;
 
-  speechSynthesis.speak(utterance);
+  speechSynthesis.speak(utter);
 }
