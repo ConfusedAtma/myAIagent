@@ -1,72 +1,72 @@
-const micBtn = document.getElementById("micBtn");
-const chat = document.getElementById("chat");
-const WORKER_URL = "tight-credit-f313my-ai-agent-worker.sarkarkoushik427.workers.dev";
+document.addEventListener("DOMContentLoaded", () => {
+  console.log("JS loaded, DOM ready");
 
-/* =======================
-   MEMORY
-======================= */
+  const micBtn = document.getElementById("micBtn");
+  const chat = document.getElementById("chat");
 
-let memory = JSON.parse(localStorage.getItem("agentMemory")) || {
-  notes: [],
-  reminders: [],
-  schedules: []
-};
+  if (!micBtn) {
+    console.error("Mic button not found");
+    return;
+  }
 
-function saveMemory() {
-  localStorage.setItem("agentMemory", JSON.stringify(memory));
-}
+  const WORKER_URL = "https://tight-credit-f313my-ai-agent-worker.sarkarkoushik427.workers.dev";
 
-/* =======================
-   CHAT UI
-======================= */
+  /* =======================
+     MEMORY
+  ======================= */
 
-function addMessage(text, type) {
-  const div = document.createElement("div");
-  div.className = `message ${type}`;
-  div.innerText = text;
-  chat.appendChild(div);
-  chat.scrollTop = chat.scrollHeight;
-}
+  let memory = JSON.parse(localStorage.getItem("agentMemory")) || {
+    notes: [],
+    reminders: [],
+    schedules: []
+  };
 
-function addSystemMessage(text) {
-  const div = document.createElement("div");
-  div.className = "system";
-  div.innerText = text;
-  chat.appendChild(div);
-  chat.scrollTop = chat.scrollHeight;
-}
+  function saveMemory() {
+    localStorage.setItem("agentMemory", JSON.stringify(memory));
+  }
 
-/* =======================
-   VOICES
-======================= */
+  /* =======================
+     CHAT UI
+  ======================= */
 
-let voices = [];
-speechSynthesis.onvoiceschanged = () => {
-  voices = speechSynthesis.getVoices();
-};
+  function addMessage(text, type) {
+    const div = document.createElement("div");
+    div.className = `message ${type}`;
+    div.innerText = text;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+  }
 
-/* =======================
-   SPEECH RECOGNITION
-======================= */
+  function addSystemMessage(text) {
+    const div = document.createElement("div");
+    div.className = "system";
+    div.innerText = text;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+  }
 
-const SpeechRecognition =
-  window.SpeechRecognition || window.webkitSpeechRecognition;
+  /* =======================
+     SPEECH RECOGNITION
+  ======================= */
 
-let recognition;
-let listening = false;
+  const SpeechRecognition =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
 
-if (SpeechRecognition) {
-  recognition = new SpeechRecognition();
+  if (!SpeechRecognition) {
+    addSystemMessage("Speech recognition not supported on this device.");
+    return;
+  }
+
+  const recognition = new SpeechRecognition();
   recognition.lang = "en-IN";
   recognition.continuous = false;
+  recognition.interimResults = false;
 
-  micBtn.onclick = () => {
-    if (listening) return;
-    listening = true;
-    micBtn.classList.add("listening", "disabled");
+  micBtn.addEventListener("click", () => {
+    console.log("Mic clicked");
     addSystemMessage("Listening...");
     recognition.start();
-  };
+  });
 
   recognition.onresult = async (event) => {
     const text = event.results[0][0].transcript;
@@ -75,95 +75,62 @@ if (SpeechRecognition) {
     await aiProcess(text);
   };
 
-  recognition.onend = () => {
-    listening = false;
-    micBtn.classList.remove("listening", "disabled");
+  recognition.onerror = (e) => {
+    console.error("Speech error", e);
+    addSystemMessage("Mic error. Try again.");
   };
-}
 
-/* =======================
-   AI PROCESS (SECURE)
-======================= */
+  /* =======================
+     AI PROCESS
+  ======================= */
 
-async function aiProcess(text) {
-  try {
-    const res = await fetch(WORKER_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text })
-    });
+  async function aiProcess(text) {
+    try {
+      const res = await fetch(WORKER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text })
+      });
 
-    const aiJson = await res.json();
-    executeIntent(aiJson);
-
-  } catch {
-    respond("AI service is not reachable right now.");
-  }
-}
-
-/* =======================
-   EXECUTE INTENT
-======================= */
-
-function executeIntent(ai) {
-  if (ai.intent === "NOTE") {
-    memory.notes.push({ text: ai.text, time: new Date().toISOString() });
-    saveMemory();
-    respond("Saved as note.");
-    return;
-  }
-
-  if (ai.intent === "REMINDER" && ai.time) {
-    const [h, m] = ai.time.split(":").map(Number);
-    const t = new Date();
-    t.setHours(h, m, 0, 0);
-
-    memory.reminders.push({
-      text: ai.text,
-      time: t.toISOString(),
-      triggered: false
-    });
-
-    saveMemory();
-    respond(`Reminder set for ${ai.time}`);
-    return;
-  }
-
-  respond("I understood you, but no action matched.");
-}
-
-/* =======================
-   REMINDER LOOP
-======================= */
-
-setInterval(() => {
-  const now = new Date();
-  memory.reminders.forEach(r => {
-    if (!r.triggered && new Date(r.time) <= now) {
-      respond("Reminder: " + r.text);
-      if (Notification.permission === "granted") {
-        new Notification("Reminder", { body: r.text });
-      }
-      r.triggered = true;
-      saveMemory();
+      const ai = await res.json();
+      executeIntent(ai);
+    } catch (err) {
+      console.error(err);
+      addSystemMessage("AI not reachable.");
     }
-  });
-}, 20000);
+  }
 
-/* =======================
-   AGENT RESPONSE
-======================= */
+  function executeIntent(ai) {
+    if (ai.intent === "NOTE") {
+      memory.notes.push({ text: ai.text, time: new Date().toISOString() });
+      saveMemory();
+      respond("Saved as note.");
+      return;
+    }
 
-function respond(message) {
-  addMessage(message, "agent");
+    if (ai.intent === "REMINDER" && ai.time) {
+      const [h, m] = ai.time.split(":").map(Number);
+      const t = new Date();
+      t.setHours(h, m, 0, 0);
 
-  const utter = new SpeechSynthesisUtterance(message);
-  const heera = voices.find(v => v.name.includes("Heera"));
-  if (heera) utter.voice = heera;
+      memory.reminders.push({
+        text: ai.text,
+        time: t.toISOString(),
+        triggered: false
+      });
 
-  utter.lang = "en-IN";
-  utter.rate = 0.95;
-  utter.pitch = 1.1;
+      saveMemory();
+      respond(`Reminder set for ${ai.time}`);
+      return;
+    }
 
-  speechSynthesis.speak(utter);
-}
+    respond("I understood you, but no action matched.");
+  }
+
+  function respond(message) {
+    addMessage(message, "agent");
+    const utter = new SpeechSynthesisUtterance(message);
+    utter.lang = "en-IN";
+    speechSynthesis.speak(utter);
+  }
+});

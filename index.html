@@ -18,10 +18,9 @@
     </div>
   </div>
 
-  <!-- Main app logic -->
-  <script src="script.js"></script>
+  <!-- IMPORTANT: defer ensures DOM is ready on mobile -->
+  <script src="script.js" defer></script>
 
-  <!-- PWA service worker -->
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("./sw.js");
